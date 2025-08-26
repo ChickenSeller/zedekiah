@@ -54,6 +54,7 @@ public class AppConfig
             {
                 config._isNew = true;
             }
+            config.NetworkId = ZeroTierCenterConfig.Config.NetworkID;
             config.ZeroTierInitStatus = ZeroTierManager.GetInitStatus(config.NetworkId);
             if (config._isNew)
             {

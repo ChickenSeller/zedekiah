@@ -26,6 +26,7 @@
                                    Width="70" />
                         <TextBox Width="200"
                                  Text=""
+                                 TextChanged="NetworkIdTextBox_OnTextChanged"
                                  Name="NetworkIdTextBox" />
                     </StackPanel>
                     <Button Name="ConnectButton"

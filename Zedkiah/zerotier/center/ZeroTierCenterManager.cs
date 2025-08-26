@@ -1,11 +1,11 @@
 ﻿using System.Net.Http;
+using Zedkiah.dto;
 using Zedkiah.dto.zerotier.center;
 
 namespace Zedkiah.zerotier.center;
 
 public class ZeroTierCenterManager
 {
-    private const string ApiKey = "APK-KEY-HERE";
     
     private const string BaseUrl = "https://my.zerotier.com/api/v1/";
     
@@ -13,7 +13,7 @@ public class ZeroTierCenterManager
     {
         using var client = new HttpClient();
         client.BaseAddress = new Uri(BaseUrl);
-        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", ApiKey);
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", ZeroTierCenterConfig.Config.ApiKey);
         
         var content = new StringContent($"{{\"name\":\"{newName}\"}}", System.Text.Encoding.UTF8, "application/json");
         var response = client.PostAsync($"network/{networkId}/member/{nodeId}", content).Result;
@@ -28,7 +28,7 @@ public class ZeroTierCenterManager
         var now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
         using var client = new HttpClient();
         client.BaseAddress = new Uri(BaseUrl);
-        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", ApiKey);
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", ZeroTierCenterConfig.Config.ApiKey);
         
         var response = client.GetAsync($"network/{networkId}/member").Result;
         if (!response.IsSuccessStatusCode)

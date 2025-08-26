@@ -12,7 +12,6 @@ using System.Text;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Win32;
-using Zedkiah.util;
 using Zedkiah.dto;
 using Zedkiah.dto.zerotier.center;
 using Zedkiah.zerotier.center;
@@ -43,6 +42,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         SetupNotifyIcon();
         StopProcesses(["zerotier-3proxy"]);
+        ZeroTierCenterConfig.Load();
         _appConfig = AppConfig.Load();
         StartProcess();
     }
@@ -133,7 +133,6 @@ public partial class MainWindow : Window
             _notifyIcon.Visible = false;
             _proxyManager.Dispose();
             _zeroTier.DisConnect();
-            RegUtil.DeleteInterfaceProfile(_appConfig.ManagedDevices.ToArray());
             _appConfig.ManagedDevices.Clear();
             AppConfig.Save(_appConfig);
             StopProcesses(["zerotier-3proxy"]);
@@ -187,15 +186,7 @@ public partial class MainWindow : Window
                     ProxyPort.IsEnabled = false;
                     ProxyStatusLabel.Text = "No Proxy Started";
                 });
-                var networkInfo = _zeroTier.Connect(_appConfig.NetworkId);
-                var interfaceUuid = NetworkUtil.GetInterfaceUuid(networkInfo.Mac);
-                if (interfaceUuid != null)
-                {
-                    if (!_appConfig.ManagedDevices.Contains(interfaceUuid))
-                    {
-                        _appConfig.ManagedDevices.Add(interfaceUuid);
-                    }
-                }
+                _zeroTier.Connect(_appConfig.NetworkId);
                 _zeroTierStatus = 2;
                 Dispatcher.Invoke(() =>
                 {
@@ -275,7 +266,6 @@ public partial class MainWindow : Window
                     _proxyManager.StopProxy();
                 }
                 _zeroTier.DisConnect();
-                RegUtil.DeleteInterfaceProfile(_appConfig.ManagedDevices.ToArray());
                 _appConfig.ManagedDevices.Clear();
                 AppConfig.Save(_appConfig);
                 _zeroTierStatus = 0;
@@ -474,5 +464,10 @@ public partial class MainWindow : Window
             RefreshPeersButton.Content = "Refresh";
             RefreshPeersButton.IsEnabled = true;
         });
+    }
+
+    private void NetworkIdTextBox_OnTextChanged(object sender, TextChangedEventArgs e)
+    {
+        _appConfig.NetworkId = NetworkIdTextBox.Text;
     }
 }
