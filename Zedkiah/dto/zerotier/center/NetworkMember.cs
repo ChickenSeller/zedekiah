@@ -1,8 +1,9 @@
 ﻿using System.Text.Json.Serialization;
+using Zedkiah.dto.service;
 
 namespace Zedkiah.dto.zerotier.center;
 
-public class NetworkMember
+public class NetworkMember:HostInfo
 {
     [JsonPropertyName("id")]
     public string Id { get; set; }

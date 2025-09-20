@@ -45,7 +45,7 @@
                                VerticalAlignment="Bottom"
                                Margin="0,5" />
                     
-                    <StackPanel Orientation="Vertical" Name="PeersInfoArea" Visibility="Collapsed" Grid.Row="3" Margin="0,5">
+                    <StackPanel Orientation="Vertical" Name="PeersInfoArea" Visibility="Visible" Grid.Row="3" Margin="0,5">
                         <Button Content="Refresh"
                                 HorizontalAlignment="Left"
                                 IsEnabled="False"
@@ -58,6 +58,19 @@
                                  Foreground="BlueViolet"
                                  Name="PeersTextBox"
                         />
+                        <DataGrid Name="PeersDataGrid"
+                                  IsReadOnly="True"
+                                  AutoGenerateColumns="False"
+                                  SelectionUnit="Cell"
+                        >
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="Auto"/>
+                                <DataGridTextColumn Header="Host" Binding="{Binding Host}" Width="Auto"/>
+                                <DataGridTextColumn Header="IP" Binding="{Binding Ip}"  Width="Auto"/>
+                                <DataGridTextColumn Header="Proxy" Binding="{Binding ProxyPort}"  Width="Auto"/>
+                                <DataGridTextColumn Header="Type" Binding="{Binding ClientType}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
                     </StackPanel>
                 </Grid>
             </TabItem>
@@ -111,6 +124,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,5">
                         <CheckBox Checked="AppConfig_OnChange" Unchecked="AppConfig_OnChange" Name="AutoStartAppEnabled">Auto Start GUI (THIS APP)</CheckBox>
@@ -119,6 +133,9 @@
                         <CheckBox Checked="AppConfig_OnChange" Unchecked="AppConfig_OnChange" Name="AutoStartZeroTierEnabled">Auto Start ZeroTier</CheckBox>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Grid.Row="2" Margin="0,5">
+                        <CheckBox Checked="AppConfig_OnChange" Unchecked="AppConfig_OnChange" Name="RecoverZeroTierStatusEnabled">Recover ZeroTier Status On Exit</CheckBox>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Grid.Row="3" Margin="0,5">
                         <CheckBox Checked="AppConfig_OnChange" Unchecked="AppConfig_OnChange" Name="AutoStartProxyEnabled">Auto Start Socks5 Proxy</CheckBox>
                     </StackPanel>
                     <Button Name="SaveConfigButton"
@@ -126,12 +143,22 @@
                             Height="30"
                             Content="Save"
                             Click="SaveConfigButton_OnClick"
-                            Grid.Row="3"
+                            Grid.Row="4"
                             HorizontalAlignment="Left"
                             VerticalAlignment="Center"
                             IsEnabled="False"
                             Margin="0,5" />
                 </Grid>
+            </TabItem>
+            <TabItem Header="Tool">
+                <Button Name="TestButton"
+                        Width="100"
+                        Height="30"
+                        Content="Test"
+                        Click="TestButton_OnClick"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Margin="0,5" />
             </TabItem>
         </TabControl>
     </Grid>

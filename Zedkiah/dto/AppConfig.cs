@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Zedkiah.zerotier;
@@ -7,29 +8,20 @@ namespace Zedkiah.dto;
 
 public class AppConfig
 {
-    [JsonPropertyName("auto_start_gui")]
-    public bool AutoStartGui { get; set; } = false;
-    [JsonPropertyName("auto_start_proxy")]
-    public bool AutoStartProxy { get; set; } = false;
-    [JsonPropertyName("auto_start_zerotier")]
-    public bool AutoStartZeroTier { get; set; } = false;
-    [JsonPropertyName("network_id")]
-    public string NetworkId { get; set; } = "8056c2e21c96887f";
-    [JsonPropertyName("proxy_port")]
-    public int ProxyPort { get; set; } = 10086;
-    [JsonPropertyName("managed_devices")]
-    public List<string> ManagedDevices { get; set; } = [];
-    [JsonIgnore]
-    public int ZeroTierInitStatus { get; set;}
-    [JsonIgnore]
-    private bool _isNew;
-    [JsonIgnore]
-    public string Hostname = Environment.MachineName;
-    public static bool Save(AppConfig config)
+    public static int ZeroTierInitStatus { get; set;}
+    private static bool _isNew;
+    public static InternalAppConfig Config { get; set;}
+    
+    public static bool Save()
     {
+        if (Config == null)
+        {
+            Config = new InternalAppConfig();
+        }
         try
         {
-            string json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+            string json =
+                JsonSerializer.Serialize(Config, new JsonSerializerOptions {WriteIndented = true});
             File.WriteAllText("config.json", json);
             return true;
         }
@@ -39,42 +31,58 @@ public class AppConfig
             return false;
         }
     }
-    public static AppConfig Load()
+    public static void Load()
     {
         try
         {
-            
-            var config = new AppConfig();
-            if (File.Exists("config.json"))
+            if (!File.Exists("config.json"))
             {
-                var json = File.ReadAllText("config.json");
-                config = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+                _isNew = true;
+                Save();
+                Load();
+                return;
             }
-            else
+            Config = JsonSerializer.Deserialize<InternalAppConfig>(File.ReadAllText("config.json"));
+            // config.NetworkId = ZeroTierCenterConfig.Config.NetworkID;
+            ZeroTierInitStatus = ZeroTierManager.GetInitStatus(Config.NetworkId);
+            if (_isNew)
             {
-                config._isNew = true;
-            }
-            config.NetworkId = ZeroTierCenterConfig.Config.NetworkID;
-            config.ZeroTierInitStatus = ZeroTierManager.GetInitStatus(config.NetworkId);
-            if (config._isNew)
-            {
-                if (ZeroTierManager.GetInitStatus(config.NetworkId) == 2)
+                if (ZeroTierManager.GetInitStatus(Config.NetworkId) == 2)
                 {
-                    config.AutoStartZeroTier = true;
+                    Config.AutoStartZeroTier = true;
                 }
             }
-            config._isNew = false;
-            if(config.ProxyPort<1 || config.ProxyPort > 65535)
+            _isNew = false;
+            if(Config.ProxyPort<1 || Config.ProxyPort > 65535)
             {
-                config.ProxyPort = 10086;
+                Config.ProxyPort = 10086;
             }
-            Save(config);
-            return config;
+            Save();
+            _isNew = false;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading config: {ex.Message}");
-            return new AppConfig();
         }
     }
+}
+
+public class InternalAppConfig
+{
+    [JsonPropertyName("auto_start_gui")]
+    public bool AutoStartGui { get; set; } = false;
+    [JsonPropertyName("auto_start_proxy")]
+    public bool AutoStartProxy { get; set; } = false;
+    [JsonPropertyName("auto_start_zerotier")]
+    public bool AutoStartZeroTier { get; set; } = false;
+    [JsonPropertyName("recover_zerotier_status_on_exit")]
+    public bool RecoverZeroTierStatusOnExit { get; set; } = false;
+    [JsonPropertyName("network_id")]
+    public string NetworkId { get; set; } = "8056c2e21c96887f";
+    [JsonPropertyName("proxy_port")]
+    public int ProxyPort { get; set; } = 10086;
+    [JsonPropertyName("managed_devices")]
+    public List<string> ManagedDevices { get; set; } = [];
+    [JsonPropertyName("hostname")]
+    public string Hostname = Environment.MachineName;
 }

@@ -22,10 +22,12 @@ public class ZeroTierCenterConfig
         {
             if (!File.Exists(FilePath))
             {
-                Environment.Exit(1);
+                return;
             }
             var json = File.ReadAllText(FilePath);
             Config = System.Text.Json.JsonSerializer.Deserialize<ZeroTierCenterConfig>(json);
+            EnvironmentInfo.NetworkId = Config.NetworkID;
+            
         }
         catch
         {

@@ -1,4 +1,5 @@
 ﻿
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Windows;
@@ -8,12 +9,14 @@ using Zedkiah.zerotier;
 using System.Windows.Forms; // NotifyIcon
 using Color = System.Windows.Media.Color;
 using System.IO;
-using System.Text;
+using System.ServiceProcess;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Win32;
 using Zedkiah.dto;
-using Zedkiah.dto.zerotier.center;
+using Zedkiah.dto.service;
+using Zedkiah.service;
+using Zedkiah.windows;
 using Zedkiah.zerotier.center;
 using Application = System.Windows.Application;
 using Timer = System.Threading.Timer;
@@ -25,8 +28,9 @@ namespace Zedkiah;
 /// </summary>
 public partial class MainWindow : Window
 {
-    private AppConfig _appConfig;
     private NotifyIcon _notifyIcon;
+    
+    private ObservableCollection<PeerInfo> _peers = new ObservableCollection<PeerInfo>();
     
     private readonly ServiceManager  _serviceManager = new ServiceManager();
         
@@ -35,15 +39,23 @@ public partial class MainWindow : Window
     private readonly ProxyManager _proxyManager = new ProxyManager();
     
     private readonly ZeroTierCenterManager _zeroTierCenterManager = new ZeroTierCenterManager();
+    
+    private readonly HostDetectService _hostDetectService = new HostDetectService();
+    
+    private readonly UdpService _udpService = new UdpService();
 
     private int _zeroTierStatus = 0;
     public MainWindow()
     {
         InitializeComponent();
+        PeersDataGrid.ItemsSource = _peers;
         SetupNotifyIcon();
         StopProcesses(["zerotier-3proxy"]);
         ZeroTierCenterConfig.Load();
-        _appConfig = AppConfig.Load();
+        AppConfig.Load();
+        _hostDetectService.ZeroTierCenterManager = _zeroTierCenterManager;
+        _hostDetectService.ZeroTier = _zeroTier;
+        _hostDetectService.NetworkId = AppConfig.Config.NetworkId;
         StartProcess();
     }
 
@@ -64,20 +76,20 @@ public partial class MainWindow : Window
     
     private void StartProcess()
     {
-        SetAutoStartApp(_appConfig.AutoStartGui);
-        CleanUpManagedDevices(_appConfig.ManagedDevices.ToArray());
-        var selfInfo = _zeroTier.GetSelfInfo();
-        _zeroTierCenterManager.SetNodeName(_appConfig.NetworkId,selfInfo.Address, _appConfig.Hostname);
-        NetworkIdTextBox.Text = _appConfig.NetworkId;
-        AutoStartAppEnabled.IsChecked = _appConfig.AutoStartGui;
-        AutoStartProxyEnabled.IsChecked = _appConfig.AutoStartProxy;
-        AutoStartZeroTierEnabled.IsChecked = _appConfig.AutoStartZeroTier;
+        SetAutoStartApp(AppConfig.Config.AutoStartGui);
+        CleanUpManagedDevices(AppConfig.Config.ManagedDevices.ToArray());
+        EnvironmentInfo.SelfInfo = _zeroTier.GetSelfInfo();
+        // _zeroTierCenterManager.SetNodeName();
+        NetworkIdTextBox.Text = AppConfig.Config.NetworkId;
+        AutoStartAppEnabled.IsChecked = AppConfig.Config.AutoStartGui;
+        AutoStartProxyEnabled.IsChecked = AppConfig.Config.AutoStartProxy;
+        AutoStartZeroTierEnabled.IsChecked = AppConfig.Config.AutoStartZeroTier;
         SaveConfigButton.IsEnabled = false;
-        ProxyPort.Text = _appConfig.ProxyPort.ToString();
-        if (_appConfig.AutoStartZeroTier || _appConfig.ZeroTierInitStatus == 2)
+        ProxyPort.Text = AppConfig.Config.ProxyPort.ToString();
+        if (AppConfig.Config.AutoStartZeroTier || AppConfig.ZeroTierInitStatus == 2)
         {
             ClickConnectButton();
-            if (_appConfig.AutoStartProxy)
+            if (AppConfig.Config.AutoStartProxy)
             {
                 Timer timer = null;
                 void Callback(object? state)
@@ -132,11 +144,14 @@ public partial class MainWindow : Window
         {
             _notifyIcon.Visible = false;
             _proxyManager.Dispose();
-            _zeroTier.DisConnect();
-            _appConfig.ManagedDevices.Clear();
-            AppConfig.Save(_appConfig);
+            if (AppConfig.Config.RecoverZeroTierStatusOnExit)
+            {
+                _zeroTier.DisConnect();
+                AppConfig.Config.ManagedDevices.Clear();
+            }
+            AppConfig.Save();
             StopProcesses(["zerotier-3proxy"]);
-            SetAutoStartApp(_appConfig.AutoStartGui);
+            SetAutoStartApp(AppConfig.Config.AutoStartGui);
             Application.Current.Shutdown();
         });
         _notifyIcon.ContextMenuStrip = contextMenu;
@@ -147,33 +162,33 @@ public partial class MainWindow : Window
         ClickConnectButton();
     }
 
-    private string GetPeersText(List<NetworkMember> peers)
-    {
-        var peerText = new StringBuilder();
-        peerText.AppendLine("Peers:");
-        foreach (var peer in peers)
-        {
-            var ip = "(Unknown)";
-            if (peer.Config.IpAssignments.Count > 0)
-            {
-                ip = string.Join(", ", peer.Config.IpAssignments);
-            }
-
-            peerText.AppendLine($"{peer.Name} ({peer.Config.Address}) : {ip}");
-        }
-
-        return peerText.ToString();
-    }
+    // private string GetPeersText(List<NetworkMember> peers)
+    // {
+    //     var peerText = new StringBuilder();
+    //     peerText.AppendLine("Peers:");
+    //     foreach (var peer in peers)
+    //     {
+    //         var ip = "(Unknown)";
+    //         if (peer.Config.IpAssignments.Count > 0)
+    //         {
+    //             ip = string.Join(", ", peer.Config.IpAssignments);
+    //         }
+    //
+    //         peerText.AppendLine($"{peer.Name} ({peer.Config.Address}) : {ip}");
+    //     }
+    //
+    //     return peerText.ToString();
+    // }
     
     private Timer _refreshPeerTimer;
-
+    
     private void ClickConnectButton()
     {
-        _appConfig.NetworkId = NetworkIdTextBox.Text;
+        AppConfig.Config.NetworkId = NetworkIdTextBox.Text;
         
         Task.Run(() =>
         {
-            _serviceManager.StartService("ZeroTierOneService");
+            _serviceManager.StartService();
             if (_zeroTierStatus == 0)
             {
                 Dispatcher.Invoke(() =>
@@ -186,7 +201,7 @@ public partial class MainWindow : Window
                     ProxyPort.IsEnabled = false;
                     ProxyStatusLabel.Text = "No Proxy Started";
                 });
-                _zeroTier.Connect(_appConfig.NetworkId);
+                _zeroTier.Connect(AppConfig.Config.NetworkId);
                 _zeroTierStatus = 2;
                 Dispatcher.Invoke(() =>
                 {
@@ -194,7 +209,7 @@ public partial class MainWindow : Window
                     ConnectionStatusLabel.Foreground = new SolidColorBrush(Color.FromArgb(255, 0, 255, 0));
                     ConnectionStatusLabel.Text =
                         $"""
-                         Connected to {_appConfig.NetworkId}
+                         Connected to {AppConfig.Config.NetworkId}
                          Fetching IP Address...
                          """;
                     ConnectButton.IsEnabled = true;
@@ -205,6 +220,9 @@ public partial class MainWindow : Window
                     if (_zeroTierStatus == 2 && _zeroTier.networkInfo.AssignedAddresses.Count > 0)
                     {
                         timer.DisposeAsync();
+                        EnvironmentInfo.IpAddress = _zeroTier.networkInfo.AssignedAddresses[0];
+                        EnvironmentInfo.ProxyPort = AppConfig.Config.ProxyPort;
+                        _udpService.StartServer();
                         Application.Current.Dispatcher.Invoke(() =>
                         {
                             ProxyButton.IsEnabled = true;
@@ -218,7 +236,7 @@ public partial class MainWindow : Window
                             }
                             ConnectionStatusLabel.Text =
                                 $"""
-                                 Connected to {_appConfig.NetworkId}
+                                 Connected to {AppConfig.Config.NetworkId}
                                  Address: {_zeroTier.networkInfo.AssignedAddresses[0]}
                                  """;
                             void RefreshPeerInfoCallback(object? s)
@@ -248,6 +266,7 @@ public partial class MainWindow : Window
                     ConnectionStatusLabel.Text = "Disconnecting...";
                     ConnectionStatusLabel.Foreground = new SolidColorBrush(Color.FromArgb(255, 0, 0, 0));
                     PeersTextBox.Text = string.Empty;
+                    _peers.Clear();
                     PeersInfoArea.Visibility = Visibility.Collapsed;
                     
                     RefreshPeersButton.IsEnabled = false;
@@ -265,9 +284,10 @@ public partial class MainWindow : Window
                     });
                     _proxyManager.StopProxy();
                 }
+                _udpService.StopServer();
                 _zeroTier.DisConnect();
-                _appConfig.ManagedDevices.Clear();
-                AppConfig.Save(_appConfig);
+                AppConfig.Config.ManagedDevices.Clear();
+                AppConfig.Save();
                 _zeroTierStatus = 0;
                 Dispatcher.Invoke(() =>
                 {
@@ -297,12 +317,12 @@ public partial class MainWindow : Window
             {
                 ProxyButton.IsEnabled = false;
                 ProxyPort.IsEnabled = false;
-                _appConfig.ProxyPort = int.Parse(ProxyPort.Text);
+                AppConfig.Config.ProxyPort = int.Parse(ProxyPort.Text);
                 var host = _zeroTier.networkInfo.AssignedAddresses[0].Split('/')[0];
-                _proxyManager.StartProxy(host,_appConfig.ProxyPort);
+                _proxyManager.StartProxy(host,AppConfig.Config.ProxyPort);
                 ProxyButton.IsEnabled = true;
                 ProxyButton.Content = "Stop Proxy";
-                ProxyStatusLabel.Text = $"Socks5 Proxy Started: {host}:{_appConfig.ProxyPort}";
+                ProxyStatusLabel.Text = $"Socks5 Proxy Started: {host}:{AppConfig.Config.ProxyPort}";
                 return;
             }
 
@@ -356,12 +376,13 @@ public partial class MainWindow : Window
 
     private void SaveConfigButton_OnClick(object sender, RoutedEventArgs e)
     {
-        _appConfig.AutoStartGui = AutoStartAppEnabled.IsChecked== true;
-        _appConfig.AutoStartZeroTier = AutoStartZeroTierEnabled.IsChecked == true;
-        _appConfig.AutoStartProxy = AutoStartProxyEnabled.IsChecked == true;
+        AppConfig.Config.AutoStartGui = AutoStartAppEnabled.IsChecked== true;
+        AppConfig.Config.AutoStartZeroTier = AutoStartZeroTierEnabled.IsChecked == true;
+        AppConfig.Config.AutoStartProxy = AutoStartProxyEnabled.IsChecked == true;
+        AppConfig.Config.RecoverZeroTierStatusOnExit = RecoverZeroTierStatusEnabled.IsChecked == true;
         SaveConfigButton.IsEnabled = false;
         SaveConfigButton.Content = "Saving...";
-        AppConfig.Save(_appConfig);
+        AppConfig.Save();
         Task.Delay(1000).ContinueWith(_ =>
         {
             Dispatcher.Invoke(() =>
@@ -380,8 +401,11 @@ public partial class MainWindow : Window
 
     private void AppConfig_OnChange(object sender, RoutedEventArgs e)
     {
-        SaveConfigButton.Content = "Save";
-        SaveConfigButton.IsEnabled = true;
+        Dispatcher.Invoke(() =>
+        {
+            SaveConfigButton.Content = "Save";
+            SaveConfigButton.IsEnabled = true;
+        });
     }
 
     private void SocksPort_OnTextChanged(object sender, TextChangedEventArgs e)
@@ -448,26 +472,77 @@ public partial class MainWindow : Window
             RefreshPeersButton.IsEnabled = false;
             PeersInfoArea.Visibility = Visibility.Visible;
         });
-        var onlinePeers = _zeroTier.GetPeers().FindAll((peer) =>
-        {
-            if ("LEAF" == peer.Role)
-            {
-                return true;
-            }
-            return false;
-        }).Select(peer=>peer.Address).ToList();
-        onlinePeers.Insert(0, _zeroTier.GetSelfInfo().Address);
-        var peers = _zeroTierCenterManager.GetNetworkMembers(_appConfig.NetworkId,onlinePeers);
+        
+        var peers = _hostDetectService.GetHosts();
+        InitPeers(peers);
+        // var x = UdpService.QueryPeerInfo();
+        // UpdatePeersByUdpInfo(x.Values.ToList());
         Dispatcher.Invoke(() =>
         {
-            PeersTextBox.Text = GetPeersText(peers);
+            // PeersTextBox.Text = GetPeersText(peers);
+            
             RefreshPeersButton.Content = "Refresh";
             RefreshPeersButton.IsEnabled = true;
         });
     }
 
+    private void InitPeers(List<DetectedHostInfo> peers)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            _peers.Clear();
+        });
+        // Get all peers in format below
+        foreach (var peer in peers)
+        {
+            var ip = string.Join(", ", peer.IpAddresses);
+            var hostName = peer.HostName;
+            if (peer.NodeId == EnvironmentInfo.SelfInfo.NodeId)
+            {
+                hostName += " (This Device)";
+            }
+
+            Dispatcher.Invoke(() =>
+            {
+                _peers.Add(new PeerInfo
+                {
+                    Host = hostName,
+                    Id = peer.NodeId,
+                    Ip = ip,
+                    ProxyPort = -1
+                });
+            });
+        }
+    }
+    
+    private void UpdatePeersByUdpInfo(List<UdpResponse> udpPeerInfos)
+    {
+        foreach (var udpPeerInfo in udpPeerInfos)
+        {
+            if(udpPeerInfo.Type=="zedekiah_info")
+            {
+                if(udpPeerInfo.Content.GetType()==typeof(UdpTransferHostInfo))
+                {
+                    UdpTransferHostInfo udpInfo = (UdpTransferHostInfo)udpPeerInfo.Content;
+                    var peer = _peers.FirstOrDefault(p => p.Id == udpInfo.NodeId);
+                    if (peer != null)
+                    {
+                        peer.ProxyPort = udpInfo.ProxyEnabled?udpInfo.ProxyPort:0;
+                        peer.ClientType = "Zedkiah";
+                    }
+                }
+            }
+        }
+    }
+
     private void NetworkIdTextBox_OnTextChanged(object sender, TextChangedEventArgs e)
     {
-        _appConfig.NetworkId = NetworkIdTextBox.Text;
+        AppConfig.Config.NetworkId = NetworkIdTextBox.Text;
+    }
+
+    private void TestButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        NetworkManager.GetInitialInterfaces();
+        NetworkManager.GetDifference();
     }
 }

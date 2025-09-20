@@ -35,8 +35,7 @@ public class ZeroTierManager
         using var client = new HttpClient();
         client.BaseAddress = new Uri(BaseUrl);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        // 加入网络
+        
         var response = client.GetAsync("peer").Result;
         return JsonSerializer.Deserialize<List<ZeroTierPeerInfo>>(response.Content.ReadAsStringAsync().Result);
     }

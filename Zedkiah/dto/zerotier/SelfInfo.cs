@@ -47,7 +47,7 @@ public class Config
 public class SelfInfo
 {
     [JsonPropertyName("address")]
-    public string Address { get; set; }
+    public string NodeId { get; set; }
 
     [JsonPropertyName("clock")]
     public long Clock { get; set; }
